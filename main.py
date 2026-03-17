@@ -10,7 +10,7 @@ from checkers.elal import check_elal
 from checkers.arkia import check_arkia
 from checkers.israir import check_israir
 from checkers.airhaifa import check_airhaifa
-from config import ORIGINS, DATES, ADULTS, INFANTS
+from config import ORIGINS, DATES, ADULTS, INFANTS, CONTROL_CHECKS
 from notify import send_notification
 from state import filter_new, save_seen
 
@@ -36,7 +36,7 @@ async def main():
     for name, checker in CHECKERS:
         logger.info(f"Checking {name}...")
         try:
-            flights = await checker(ORIGINS, DATES, ADULTS, INFANTS)
+            flights = await checker(ORIGINS, DATES, ADULTS, INFANTS, CONTROL_CHECKS)
             logger.info(f"{name}: {len(flights)} flight(s) found")
             all_flights.extend(flights)
         except Exception as e:

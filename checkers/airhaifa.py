@@ -24,7 +24,7 @@ INTERCEPT_PATTERNS = [
 BOOKING_URL = "https://www.airhaifa.co.il"
 
 
-async def check_airhaifa(origins: list, dates: list, adults: int, infants: int) -> list:
+async def check_airhaifa(origins: list, dates: list, adults: int, infants: int, control_checks: list = []) -> list:
     # Check if there are any routes configured; skip entirely if empty
     all_dests = [d for o in origins for d in ROUTES["airhaifa"].get(o, [])]
     if not all_dests:

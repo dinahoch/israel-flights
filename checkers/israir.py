@@ -25,17 +25,19 @@ INTERCEPT_PATTERNS = [
 BOOKING_URL = "https://www.israirairlines.com"
 
 
-async def check_israir(origins: list, dates: list, adults: int, infants: int) -> list:
-    return await with_browser(_run, origins, dates, adults, infants)
+async def check_israir(origins: list, dates: list, adults: int, infants: int, control_checks: list = []) -> list:
+    return await with_browser(_run, origins, dates, adults, infants, control_checks)
 
 
-async def _run(context, origins, dates, adults, infants):
+async def _run(context, origins, dates, adults, infants, control_checks):
     tasks = []
     for origin in origins:
         dests = ROUTES["israir"].get(origin, [])
         for dest in dests:
             for date in dates:
                 tasks.append(_search_one(context, origin, dest, date, adults, infants))
+    for origin, dest, date in control_checks:
+        tasks.append(_search_one(context, origin, dest, date, adults, infants))
 
     results = await run_concurrent(tasks)
     flights = []

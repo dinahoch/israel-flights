@@ -26,24 +26,22 @@ INTERCEPT_PATTERNS = [
 ]
 
 # Navitaire booking is often on a subdomain; try both
-BOOKING_URLS = [
-    "https://booking.arkia.com",
-    "https://www.arkia.com",
-]
-BOOKING_URL = BOOKING_URLS[0]
+BOOKING_URL = "https://www.arkia.com"
 
 
-async def check_arkia(origins: list, dates: list, adults: int, infants: int) -> list:
-    return await with_browser(_run, origins, dates, adults, infants)
+async def check_arkia(origins: list, dates: list, adults: int, infants: int, control_checks: list = []) -> list:
+    return await with_browser(_run, origins, dates, adults, infants, control_checks)
 
 
-async def _run(context, origins, dates, adults, infants):
+async def _run(context, origins, dates, adults, infants, control_checks):
     tasks = []
     for origin in origins:
         dests = ROUTES["arkia"].get(origin, [])
         for dest in dests:
             for date in dates:
                 tasks.append(_search_one(context, origin, dest, date, adults, infants))
+    for origin, dest, date in control_checks:
+        tasks.append(_search_one(context, origin, dest, date, adults, infants))
 
     results = await run_concurrent(tasks)
     flights = []

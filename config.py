@@ -53,3 +53,9 @@ ROUTES = {
     "israir":   {"TLV": ALL_DESTINATIONS, "HFA": []},
     "airhaifa": {"TLV": [], "HFA": []},  # Domestic only
 }
+
+# Positive control: fixed searches that should always return flights,
+# used to verify the scrapers are actually working.
+CONTROL_CHECKS = [
+    ("TLV", "ATH", "2026-04-30"),
+]
