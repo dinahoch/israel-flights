@@ -3,26 +3,53 @@ DATES = ["2026-03-18", "2026-03-19", "2026-03-20", "2026-03-21", "2026-03-22"]
 ADULTS = 2
 INFANTS = 1
 
-# European airports to search per airline (curated to known/likely routes)
+# All destinations to check (applied to all airlines — empty results are handled gracefully)
+ALL_DESTINATIONS = [
+    # London (all airports)
+    "LHR",  # Heathrow
+    "LGW",  # Gatwick
+    "STN",  # Stansted
+    "LTN",  # Luton
+    "LCY",  # City
+    # France
+    "CDG",  # Paris Charles de Gaulle
+    "ORY",  # Paris Orly
+    # Germany
+    "FRA",  # Frankfurt
+    "MUC",  # Munich
+    "BER",  # Berlin
+    # Netherlands
+    "AMS",  # Amsterdam
+    # Spain
+    "BCN",  # Barcelona
+    "MAD",  # Madrid
+    # Italy
+    "FCO",  # Rome Fiumicino
+    "MXP",  # Milan Malpensa
+    # Greece
+    "ATH",  # Athens
+    # Cyprus
+    "LCA",  # Larnaca
+    # Austria
+    "VIE",  # Vienna
+    # Switzerland
+    "ZRH",  # Zurich
+    "GVA",  # Geneva
+    # Poland
+    "WAW",  # Warsaw
+    # Hungary
+    "BUD",  # Budapest
+    # Bulgaria
+    "SOF",  # Sofia
+    # Romania
+    "OTP",  # Bucharest
+    # Georgia
+    "TBS",  # Tbilisi
+]
+
 ROUTES = {
-    "elal": {
-        # El Al flies internationally from TLV only
-        "TLV": ["LHR", "LGW", "CDG", "AMS", "FRA", "BCN", "FCO", "ATH", "VIE", "ZRH", "BER", "MUC"],
-        "HFA": [],
-    },
-    "arkia": {
-        # Arkia operates charter/scheduled from TLV
-        "TLV": ["LGW", "CDG", "ATH", "BCN", "FCO", "AMS", "VIE", "FRA"],
-        "HFA": [],
-    },
-    "israir": {
-        # Israir mainly charter from TLV
-        "TLV": ["LGW", "CDG", "ATH", "BCN", "FCO"],
-        "HFA": [],
-    },
-    "airhaifa": {
-        # Air Haifa is domestic only — no European routes expected
-        "TLV": [],
-        "HFA": [],
-    },
+    "elal":     {"TLV": ALL_DESTINATIONS, "HFA": []},
+    "arkia":    {"TLV": ALL_DESTINATIONS, "HFA": []},
+    "israir":   {"TLV": ALL_DESTINATIONS, "HFA": []},
+    "airhaifa": {"TLV": [], "HFA": []},  # Domestic only
 }
