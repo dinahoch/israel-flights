@@ -1,0 +1,137 @@
+"""
+El Al (LY) flight checker.
+
+El Al uses a custom React booking engine. The search widget on their homepage
+POSTs to an internal REST API. We navigate to a pre-filled search URL and
+intercept the JSON availability response.
+
+If this checker returns nothing for routes you expect to have flights, open
+Chrome DevTools > Network > Filter: Fetch/XHR, do a search on elal.com,
+and look for a request with "availability" or "search" in its URL.
+Update INTERCEPT_PATTERNS below with the actual path fragment.
+"""
+import logging
+from .base import with_browser, search_with_interception, run_concurrent
+from config import ROUTES
+
+logger = logging.getLogger(__name__)
+
+# URL fragment(s) that identify El Al's flight search API call.
+# IMPORTANT: verify against actual network traffic if no results appear.
+INTERCEPT_PATTERNS = [
+    "availability",
+    "flight-search",
+    "flightSearch",
+    "search/flights",
+]
+
+BOOKING_URL = "https://www.elal.com/en/booking"
+
+
+async def check_elal(origins: list, dates: list, adults: int, infants: int) -> list:
+    return await with_browser(_run, origins, dates, adults, infants)
+
+
+async def _run(context, origins, dates, adults, infants):
+    tasks = []
+    for origin in origins:
+        dests = ROUTES["elal"].get(origin, [])
+        for dest in dests:
+            for date in dates:
+                tasks.append(_search_one(context, origin, dest, date, adults, infants))
+
+    results = await run_concurrent(tasks)
+    flights = []
+    for r in results:
+        if isinstance(r, Exception):
+            logger.error(f"El Al search error: {r}")
+        elif r:
+            flights.extend(r)
+    return flights
+
+
+async def _search_one(context, origin, dest, date, adults, infants):
+    # Build the URL with query params — El Al's SPA should trigger the search.
+    # The exact param names may differ; adjust if you see wrong/no results.
+    date_fmt = date.replace("-", "")  # e.g. 20260318
+    url = (
+        f"{BOOKING_URL}?"
+        f"origin={origin}&destination={dest}"
+        f"&departDate={date_fmt}"
+        f"&tripType=OW"
+        f"&adults={adults}&children=0&infants={infants}"
+        f"&cabin=Y"
+    )
+
+    logger.info(f"El Al: {origin}→{dest} {date}")
+    captured = await search_with_interception(context, url, INTERCEPT_PATTERNS)
+
+    flights = []
+    for item in captured:
+        parsed = _parse(item["data"], origin, dest, date)
+        flights.extend(parsed)
+        if parsed:
+            logger.info(f"El Al: ✓ Found {len(parsed)} flight(s) {origin}→{dest} {date}")
+
+    return flights
+
+
+def _parse(data: dict | list, origin: str, dest: str, date: str) -> list:
+    """
+    Extract flights from the JSON response.
+    Structure depends on El Al's API — this is a best-effort parser.
+    Update once you see the actual response shape in the logs.
+    """
+    flights = []
+    book_url = (
+        f"https://www.elal.com/en/booking?"
+        f"origin={origin}&destination={dest}"
+        f"&departDate={date.replace('-','')}&tripType=OW&adults=2&infants=1"
+    )
+
+    # Flatten into a list for uniform handling
+    items = data if isinstance(data, list) else [data]
+
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+
+        # Try common field names used by airline APIs
+        price = (
+            item.get("price")
+            or item.get("totalPrice")
+            or item.get("fare")
+            or item.get("lowestPrice")
+            or item.get("amount")
+        )
+        dep_time = (
+            item.get("departureTime")
+            or item.get("departure")
+            or item.get("std")  # Scheduled Time of Departure
+            or item.get("depTime")
+        )
+        flight_no = (
+            item.get("flightNumber")
+            or item.get("flightNo")
+            or item.get("number")
+            or "LY"
+        )
+
+        # Recurse into nested structures (e.g. {"flights": [...], "fares": [...]})
+        for key in ("flights", "itineraries", "results", "options", "segments"):
+            if key in item and isinstance(item[key], list):
+                flights.extend(_parse(item[key], origin, dest, date))
+
+        if price is not None or dep_time is not None:
+            flights.append({
+                "airline": "El Al",
+                "origin": origin,
+                "destination": dest,
+                "date": date,
+                "departure_time": str(dep_time) if dep_time else "See website",
+                "price": str(price) if price else "See website",
+                "flight_number": str(flight_no),
+                "url": book_url,
+            })
+
+    return flights
