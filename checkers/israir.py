@@ -45,7 +45,10 @@ async def _run(context, origins, dates, adults, infants, control_checks):
     for origin, dest, date in control_checks:
         tasks.append(_search_one(context, origin, [dest], date, adults, infants))
 
-    results = await run_concurrent(tasks)
+    # Israir's React app detects concurrent page loads in the same browser
+    # context (shared cookies/localStorage) and suppresses the search API call.
+    # Run one page at a time to avoid this.
+    results = await run_concurrent(tasks, concurrency=1)
     flights = []
     for r in results:
         if isinstance(r, Exception):
