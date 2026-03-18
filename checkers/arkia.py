@@ -1,15 +1,18 @@
 """
 Arkia (IZ) flight checker.
 
-Arkia uses Navitaire NewSkies as their booking engine (confirmed).
-Navitaire's REST API is typically at a booking subdomain and responds to
-POST /api/v1/availability/search or GET /nsk/api/... calls.
+GitHub Actions IPs are blocked (403) by Arkia's WAF when using Playwright.
+We first try a plain requests session (different TLS fingerprint — bypasses
+JA3/JA4 bot detection) and scrape any JSON embedded in the HTML.
+If that also returns 403, we fall back to Playwright.
 
-If no results: open DevTools > Network > XHR while searching on arkia.com,
-find the availability request, and update INTERCEPT_PATTERNS + BOOKING_URL.
-Common Navitaire clues: paths contain /nsk/, /newskies/, or /api/v1/availability.
+If still no results: open DevTools > Network > XHR on arkia.co.il and
+look for the availability API call; update INTERCEPT_PATTERNS accordingly.
 """
 import logging
+import re
+import json
+import requests
 from .base import with_browser, search_with_interception, run_concurrent
 from config import ROUTES
 
@@ -26,6 +29,17 @@ INTERCEPT_PATTERNS = [
 ]
 
 BOOKING_URL = "https://www.arkia.co.il/he/flights-results"
+
+_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/122.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "he-IL,he;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Accept-Encoding": "gzip, deflate, br",
+}
 
 
 async def check_arkia(origins: list, dates: list, adults: int, infants: int, control_checks: list = []) -> list:
@@ -63,8 +77,29 @@ async def _search_one(context, origin, dest, date, adults, infants):
     )
 
     logger.info(f"Arkia: {origin}→{dest} {date}")
-    captured = await search_with_interception(context, url, INTERCEPT_PATTERNS)
 
+    # --- Phase 1: plain HTTP request (different TLS fingerprint from Playwright) ---
+    try:
+        session = requests.Session()
+        # Homepage first to pick up cookies / satisfy WAF session requirements
+        session.get("https://www.arkia.co.il/", headers=_HEADERS, timeout=10)
+        resp = session.get(
+            url,
+            headers={**_HEADERS, "Referer": "https://www.arkia.co.il/"},
+            timeout=15,
+        )
+        logger.debug(f"Arkia HTTP: {resp.status_code} ({len(resp.content)} bytes)")
+        logger.debug(f"Arkia HTML head: {resp.text[:400]}")
+        if resp.status_code == 200 and resp.content:
+            found = _parse_html(resp.text, origin, dest, date)
+            if found:
+                logger.info(f"Arkia HTTP: ✓ Found {len(found)} flight(s) {origin}→{dest} {date}")
+                return found
+    except Exception as e:
+        logger.warning(f"Arkia HTTP error: {e}")
+
+    # --- Phase 2: Playwright browser fallback ---
+    captured = await search_with_interception(context, url, INTERCEPT_PATTERNS)
     flights = []
     for item in captured:
         parsed = _parse(item["data"], origin, dest, date)
@@ -74,9 +109,43 @@ async def _search_one(context, origin, dest, date, adults, infants):
     return flights
 
 
+def _parse_html(html: str, origin: str, dest: str, date: str) -> list:
+    """Look for flight JSON embedded server-side in the page HTML."""
+    book_url = (
+        f"https://www.arkia.co.il/he/flights-results?"
+        f"CC=FL&IS_BACK_N_FORTH=false"
+        f"&OB_DEP_CITY={origin}&OB_ARV_CITY={dest}"
+        f"&OB_DATE={date.replace('-','')}"
+        f"&ADULTS=2&INFANTS=1"
+    )
+    for pattern in [
+        r'window\.__INITIAL_STATE__\s*=\s*(\{.*?\});',
+        r'window\.__DATA__\s*=\s*(\{.*?\});',
+        r'window\.__PRELOADED_STATE__\s*=\s*(\{.*?\});',
+        r'<script[^>]*type=["\']application/json["\'][^>]*>(.*?)</script>',
+    ]:
+        m = re.search(pattern, html, re.DOTALL)
+        if m:
+            try:
+                data = json.loads(m.group(1))
+                logger.info(f"Arkia HTML: found embedded JSON")
+                parsed = _parse(data, origin, dest, date)
+                if parsed:
+                    return parsed
+            except Exception:
+                pass
+    return []
+
+
 def _parse(data: dict | list, origin: str, dest: str, date: str) -> list:
     flights = []
-    book_url = f"https://www.arkia.com/booking?from={origin}&to={dest}&date={date}&adult=2&infant=1&triptype=OW"
+    book_url = (
+        f"https://www.arkia.co.il/he/flights-results?"
+        f"CC=FL&IS_BACK_N_FORTH=false"
+        f"&OB_DEP_CITY={origin}&OB_ARV_CITY={dest}"
+        f"&OB_DATE={date.replace('-','')}"
+        f"&ADULTS=2&INFANTS=1"
+    )
 
     items = data if isinstance(data, list) else [data]
     for item in items:

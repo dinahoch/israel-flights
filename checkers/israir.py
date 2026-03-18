@@ -78,7 +78,7 @@ async def _search_one(context, origin, allowed_dests, date, adults, infants):
     )
 
     logger.info(f"Israir: {origin}→[all] {date} (filtering to {allowed_dests})")
-    captured = await search_with_interception(context, url, INTERCEPT_PATTERNS)
+    captured = await search_with_interception(context, url, INTERCEPT_PATTERNS, timeout_ms=25000)
 
     flights = []
     for item in captured:
