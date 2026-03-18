@@ -138,10 +138,20 @@ def _parse(data: dict, origin: str, date: str, allowed_dests: list) -> list:
                         or "6H"
                     )
 
+                    import json as _json, urllib.parse as _up
+                    _origin_obj = _json.dumps({
+                        "type": "ltravelId", "destinationType": "CITY",
+                        "cityCode": origin, "ltravelId": 2135,
+                        "countryCode": None, "countryId": None,
+                    })
+                    _date_fmt = f"{date[8:10]}/{date[5:7]}/{date[:4]}"
                     book_url = (
-                        f"https://www.israirairlines.com/booking?"
-                        f"from={origin}&to={dest}&date={date}"
-                        f"&adults=2&infants=1&tripType=OW"
+                        f"https://www.israir.co.il/he-IL/reservation/search/flights-abroad/results?"
+                        f"origin={_up.quote(_origin_obj)}"
+                        f"&destination={dest}"
+                        f"&startDate={_date_fmt}"
+                        f"&adults=2&infants=1&subject=ALL"
+                        f"&searchTime={date}T12:00:00.000Z"
                     )
 
                     flights.append({
