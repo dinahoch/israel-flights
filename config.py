@@ -54,8 +54,11 @@ ROUTES = {
     "airhaifa": {"TLV": ["LCA", "ATH"], "HFA": ["LCA", "ATH"]},
 }
 
-# Positive control: fixed searches that should always return flights,
-# used to verify the scrapers are actually working.
-CONTROL_CHECKS = [
-    ("TLV", "ATH", "2026-04-30"),
-]
+# Positive control: one search per airline that should always return flights.
+# If it returns nothing the scraper is broken — skip that airline for this run.
+CONTROL_CHECKS = {
+    "elal":     ("TLV", "ATH", "2026-04-30"),
+    "arkia":    ("TLV", "ATH", "2026-04-30"),
+    "israir":   ("TLV", "ATH", "2026-04-30"),
+    "airhaifa": ("TLV", "ATH", "2026-03-21"),
+}

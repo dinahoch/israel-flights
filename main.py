@@ -10,7 +10,7 @@ from checkers.elal import check_elal
 from checkers.arkia import check_arkia
 from checkers.israir import check_israir
 from checkers.airhaifa import check_airhaifa
-from config import ORIGINS, DATES, ADULTS, INFANTS, CONTROL_CHECKS
+from config import ORIGINS, DATES, ADULTS, INFANTS, CONTROL_CHECKS, ROUTES
 from notify import send_notification
 from state import filter_new, save_seen
 
@@ -22,10 +22,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 CHECKERS = [
-    ("El Al", check_elal),
-    ("Arkia", check_arkia),
-    ("Israir", check_israir),
-    ("Air Haifa", check_airhaifa),
+    ("El Al",     "elal",     check_elal),
+    ("Arkia",     "arkia",    check_arkia),
+    ("Israir",    "israir",   check_israir),
+    ("Air Haifa", "airhaifa", check_airhaifa),
 ]
 
 
@@ -33,10 +33,20 @@ async def main():
     logger.info(f"Starting flight check — origins: {ORIGINS}, dates: {DATES}")
 
     all_flights = []
-    for name, checker in CHECKERS:
-        logger.info(f"Checking {name}...")
+    for name, key, checker in CHECKERS:
+        control = CONTROL_CHECKS[key]
+        logger.info(f"Checking {name} (control: {control[0]}→{control[1]} {control[2]})...")
         try:
-            flights = await checker(ORIGINS, DATES, ADULTS, INFANTS, CONTROL_CHECKS)
+            # Phase 1: control check — one known route that should always have seats
+            control_results = await checker([], [], ADULTS, INFANTS, [control])
+            if not control_results:
+                logger.warning(f"{name}: control check returned 0 results — scraper may be broken, skipping this airline")
+                continue
+
+            logger.info(f"{name}: control check passed ({len(control_results)} result(s))")
+
+            # Phase 2: full search across all dates and destinations
+            flights = await checker(ORIGINS, DATES, ADULTS, INFANTS, [])
             logger.info(f"{name}: {len(flights)} flight(s) found")
             all_flights.extend(flights)
         except Exception as e:
