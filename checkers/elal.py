@@ -1,23 +1,23 @@
 """
 El Al (LY) flight checker.
 
-El Al uses a custom React booking engine. The search widget on their homepage
-POSTs to an internal REST API. We navigate to a pre-filled search URL and
-intercept the JSON availability response.
+El Al's WAF blocks direct navigation to /en/flight-search — it requires a proper
+session established from the homepage first.  We:
+  1. Navigate to the El Al homepage to get cookies / set Referer.
+  2. Navigate to the pre-filled search URL (WAF now sees a valid Referer).
+  3. Try to click the Search button so the SPA fires its availability API.
+  4. Intercept the JSON response.
 
-If this checker returns nothing for routes you expect to have flights, open
-Chrome DevTools > Network > Filter: Fetch/XHR, do a search on elal.com,
-and look for a request with "availability" or "search" in its URL.
+If this still returns nothing, open Chrome DevTools > Network > Filter: Fetch/XHR,
+search on elal.com, and look for a URL containing "availability" or "search".
 Update INTERCEPT_PATTERNS below with the actual path fragment.
 """
 import logging
-from .base import with_browser, search_with_interception, run_concurrent
+from .base import with_browser, run_concurrent
 from config import ROUTES
 
 logger = logging.getLogger(__name__)
 
-# URL fragment(s) that identify El Al's flight search API call.
-# IMPORTANT: verify against actual network traffic if no results appear.
 INTERCEPT_PATTERNS = [
     "availability",
     "flight-search",
@@ -30,7 +30,11 @@ INTERCEPT_PATTERNS = [
     "itineraries",
 ]
 
-BOOKING_URL = "https://www.elal.com/en/flight-search"
+HOMEPAGE = "https://www.elal.com/en"
+SEARCH_URL = "https://www.elal.com/en/flight-search"
+
+# Responses from these domains/paths are noise — skip them
+_SKIP = ("analytics", "google", "facebook", "cdn", ".css", ".woff", ".png", ".jpg", ".svg", ".ico")
 
 
 async def check_elal(origins: list, dates: list, adults: int, infants: int, control_checks: list = []) -> list:
@@ -58,11 +62,8 @@ async def _run(context, origins, dates, adults, infants, control_checks):
 
 
 async def _search_one(context, origin, dest, date, adults, infants):
-    # Build the URL with query params — El Al's SPA should trigger the search.
-    # The exact param names may differ; adjust if you see wrong/no results.
-    date_fmt = date.replace("-", "")  # e.g. 20260318
     url = (
-        f"{BOOKING_URL}?"
+        f"{SEARCH_URL}?"
         f"origin={origin}&destination={dest}"
         f"&outboundDate={date}"
         f"&tripType=ONE_WAY"
@@ -72,34 +73,41 @@ async def _search_one(context, origin, dest, date, adults, infants):
 
     logger.info(f"El Al: {origin}→{dest} {date}")
 
-    # El Al's /en/flight-search URL pre-fills the form but doesn't auto-submit.
-    # We navigate there, then click the search button to trigger the API call.
     captured = []
     page = await context.new_page()
 
     async def on_response(response):
+        if any(s in response.url for s in _SKIP):
+            return
+        logger.debug(f"[El Al] {response.status} {response.url[:140]}")
         if any(p in response.url for p in INTERCEPT_PATTERNS):
             try:
                 import json as _json
                 data = await response.json()
                 captured.append({"url": response.url, "data": data})
                 logger.info(f"El Al intercepted: {response.url}")
-                logger.info(f"El Al response snippet: {_json.dumps(data)[:600]}")
+                logger.info(f"El Al snippet: {_json.dumps(data)[:600]}")
             except Exception:
                 pass
 
     page.on("response", on_response)
     try:
-        await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+        # Step 1: homepage — establishes cookies and sets a valid Referer
+        await page.goto(HOMEPAGE, wait_until="domcontentloaded", timeout=30000)
         await page.wait_for_timeout(2000)
-        # Try to click the search/submit button
+
+        # Step 2: pre-filled search URL (WAF should now accept it)
+        await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+        await page.wait_for_timeout(3000)
+
+        # Step 3: click Search button to trigger the availability API call
         for selector in [
             "button[type='submit']",
             "button:has-text('Search')",
             "button:has-text('חפש')",
             "[data-testid*='search']",
             "[class*='search-btn']",
-            "[class*='SearchButton']",
+            "[class*='SearchButton'i]",
         ]:
             try:
                 btn = page.locator(selector).first
@@ -109,6 +117,7 @@ async def _search_one(context, origin, dest, date, adults, infants):
                     break
             except Exception:
                 continue
+
         await page.wait_for_timeout(10000)
     except Exception as e:
         logger.warning(f"El Al page error {origin}→{dest} {date}: {e}")
@@ -122,15 +131,13 @@ async def _search_one(context, origin, dest, date, adults, infants):
         flights.extend(parsed)
         if parsed:
             logger.info(f"El Al: ✓ Found {len(parsed)} flight(s) {origin}→{dest} {date}")
-
     return flights
 
 
 def _parse(data: dict | list, origin: str, dest: str, date: str) -> list:
     """
     Extract flights from the JSON response.
-    Structure depends on El Al's API — this is a best-effort parser.
-    Update once you see the actual response shape in the logs.
+    Structure depends on El Al's API — update once you see the actual response shape in the logs.
     """
     flights = []
     book_url = (
@@ -139,14 +146,12 @@ def _parse(data: dict | list, origin: str, dest: str, date: str) -> list:
         f"&departDate={date.replace('-','')}&tripType=OW&adults=2&infants=1"
     )
 
-    # Flatten into a list for uniform handling
     items = data if isinstance(data, list) else [data]
 
     for item in items:
         if not isinstance(item, dict):
             continue
 
-        # Try common field names used by airline APIs
         price = (
             item.get("price")
             or item.get("totalPrice")
@@ -157,7 +162,7 @@ def _parse(data: dict | list, origin: str, dest: str, date: str) -> list:
         dep_time = (
             item.get("departureTime")
             or item.get("departure")
-            or item.get("std")  # Scheduled Time of Departure
+            or item.get("std")
             or item.get("depTime")
         )
         flight_no = (
@@ -167,7 +172,6 @@ def _parse(data: dict | list, origin: str, dest: str, date: str) -> list:
             or "LY"
         )
 
-        # Recurse into nested structures (e.g. {"flights": [...], "fares": [...]})
         for key in ("flights", "itineraries", "results", "options", "segments"):
             if key in item and isinstance(item[key], list):
                 flights.extend(_parse(item[key], origin, dest, date))
