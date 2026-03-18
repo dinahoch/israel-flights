@@ -15,12 +15,8 @@ from config import ROUTES
 logger = logging.getLogger(__name__)
 
 INTERCEPT_PATTERNS = [
-    "availability",
-    "search",
-    "flights",
-    "results",
-    "offers",
-    "/api/",
+    "/api/search/FLIGHTS",
+    "/api/engine",
 ]
 
 BOOKING_URL = "https://www.israir.co.il/he-IL/reservation/search/flights-abroad/results"

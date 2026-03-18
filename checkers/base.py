@@ -59,6 +59,10 @@ async def search_with_interception(context: BrowserContext, url: str, intercept_
                 data = await response.json()
                 captured.append({"url": response.url, "data": data})
                 logger.info(f"Intercepted: {response.url}")
+                # Log a snippet of the response to help identify field names
+                import json as _json
+                snippet = _json.dumps(data)[:600]
+                logger.info(f"Response snippet: {snippet}")
             except Exception:
                 pass
 

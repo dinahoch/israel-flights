@@ -60,5 +60,5 @@ CONTROL_CHECKS = {
     "elal":     ("TLV", "ATH", "2026-04-30"),
     "arkia":    ("TLV", "ATH", "2026-04-30"),
     "israir":   ("TLV", "ATH", "2026-04-30"),
-    "airhaifa": ("TLV", "ATH", "2026-03-21"),
+    "airhaifa": ("TLV", "LCA", "2026-03-20"),
 }

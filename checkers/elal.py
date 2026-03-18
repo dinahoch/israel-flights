@@ -71,7 +71,50 @@ async def _search_one(context, origin, dest, date, adults, infants):
     )
 
     logger.info(f"El Al: {origin}→{dest} {date}")
-    captured = await search_with_interception(context, url, INTERCEPT_PATTERNS)
+
+    # El Al's /en/flight-search URL pre-fills the form but doesn't auto-submit.
+    # We navigate there, then click the search button to trigger the API call.
+    captured = []
+    page = await context.new_page()
+
+    async def on_response(response):
+        if any(p in response.url for p in INTERCEPT_PATTERNS):
+            try:
+                import json as _json
+                data = await response.json()
+                captured.append({"url": response.url, "data": data})
+                logger.info(f"El Al intercepted: {response.url}")
+                logger.info(f"El Al response snippet: {_json.dumps(data)[:600]}")
+            except Exception:
+                pass
+
+    page.on("response", on_response)
+    try:
+        await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+        await page.wait_for_timeout(2000)
+        # Try to click the search/submit button
+        for selector in [
+            "button[type='submit']",
+            "button:has-text('Search')",
+            "button:has-text('חפש')",
+            "[data-testid*='search']",
+            "[class*='search-btn']",
+            "[class*='SearchButton']",
+        ]:
+            try:
+                btn = page.locator(selector).first
+                if await btn.is_visible(timeout=1000):
+                    await btn.click()
+                    logger.info(f"El Al: clicked search button ({selector})")
+                    break
+            except Exception:
+                continue
+        await page.wait_for_timeout(10000)
+    except Exception as e:
+        logger.warning(f"El Al page error {origin}→{dest} {date}: {e}")
+    finally:
+        page.remove_listener("response", on_response)
+        await page.close()
 
     flights = []
     for item in captured:
