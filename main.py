@@ -45,10 +45,10 @@ async def main():
 
             logger.info(f"{name}: control check passed ({len(control_results)} result(s))")
 
-            # Phase 2: full search across all dates and destinations
-            flights = await checker(ORIGINS, DATES, ADULTS, INFANTS, [])
-            logger.info(f"{name}: {len(flights)} flight(s) found")
-            all_flights.extend(flights)
+            # Phase 2: full search — commented out while debugging control checks
+            # flights = await checker(ORIGINS, DATES, ADULTS, INFANTS, [])
+            # logger.info(f"{name}: {len(flights)} flight(s) found")
+            # all_flights.extend(flights)
         except Exception as e:
             logger.error(f"{name} checker failed: {e}", exc_info=True)
 
