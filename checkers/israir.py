@@ -112,14 +112,28 @@ def _parse(data: dict, origin: str, date: str, allowed_dests: list) -> list:
     if isinstance(additional, dict):
         packages.extend(additional.get("ltsPackages", []))
 
+    # Log field names of the first package/option so we can identify the
+    # exact availability field if our heuristic misses any sold-out flights.
+    if packages and isinstance(packages[0], dict):
+        logger.debug(f"Israir pkg keys: {list(packages[0].keys())}")
+        _lg = packages[0].get("legGroups", [{}])
+        _ll = _lg[0].get("legList", [{}]) if _lg else []
+        _ol = _ll[0].get("legOptionList", [{}]) if _ll else []
+        if _ol:
+            logger.debug(f"Israir legOption keys: {list(_ol[0].keys())}")
+
     for pkg in packages:
         if not isinstance(pkg, dict):
+            continue
+        if _is_sold_out(pkg):
             continue
         pkg_price = _extract_price(pkg)
 
         for leg_group in pkg.get("legGroups", []):
             for leg in leg_group.get("legList", []):
                 for option in leg.get("legOptionList", []):
+                    if _is_sold_out(option):
+                        continue
                     opt_price = _extract_price(option) or pkg_price
                     segments = option.get("legSegmentList", [])
                     if not segments:
@@ -169,6 +183,33 @@ def _parse(data: dict, origin: str, date: str, allowed_dests: list) -> list:
                     })
 
     return flights
+
+
+def _is_sold_out(obj: dict) -> bool:
+    """Return True if this package/option is sold out or has no availability."""
+    if not isinstance(obj, dict):
+        return False
+    # Boolean sold-out flags
+    for key in ("isSoldOut", "soldOut", "isFullFlight", "isFull", "isClosed", "isUnavailable"):
+        if obj.get(key) is True:
+            return True
+    # Inverse availability flags
+    for key in ("isAvailable", "hasAvailability", "available"):
+        v = obj.get(key)
+        if v is False:
+            return True
+    # Numeric seat counts
+    for key in ("seatsAvailable", "availableSeats", "seats", "availability"):
+        v = obj.get(key)
+        if isinstance(v, (int, float)) and v <= 0:
+            return True
+    # String status values
+    _SOLD_OUT = {"SOLD_OUT", "FULL", "CLOSED", "NONE", "UNAVAILABLE", "NO_AVAILABILITY", "INACTIVE"}
+    for key in ("status", "fareAvailability", "availabilityStatus", "flightStatus"):
+        v = obj.get(key)
+        if isinstance(v, str) and v.upper() in _SOLD_OUT:
+            return True
+    return False
 
 
 def _extract_price(obj: dict):
