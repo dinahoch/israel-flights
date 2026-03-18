@@ -40,15 +40,25 @@ async def search_with_interception(context: BrowserContext, url: str, intercept_
     """
     Navigate to `url` and collect all JSON responses whose URLs match any of
     `intercept_patterns`.  Returns a list of parsed JSON dicts.
+
+    Also logs ALL XHR/fetch response URLs at DEBUG level so we can identify
+    the correct API endpoint if our patterns don't match.
     """
     captured = []
 
     async def on_response(response):
+        content_type = response.headers.get("content-type", "")
+        # Log every JSON or XHR response to help diagnose missing intercepts
+        if "json" in content_type or "javascript" not in content_type:
+            if any(skip in response.url for skip in ("analytics", "google", "facebook", "cdn", ".css", ".js", ".png", ".jpg", ".woff")):
+                return
+            logger.debug(f"[API] {response.status} {response.url}")
+
         if any(p in response.url for p in intercept_patterns):
             try:
                 data = await response.json()
                 captured.append({"url": response.url, "data": data})
-                logger.debug(f"Intercepted: {response.url}")
+                logger.info(f"Intercepted: {response.url}")
             except Exception:
                 pass
 

@@ -21,35 +21,30 @@ INTERCEPT_PATTERNS = [
     "booking",
 ]
 
-BOOKING_URL = "https://www.airhaifa.co.il"
+BOOKING_URL = "https://www.airhaifa.com"
 
 
 async def check_airhaifa(origins: list, dates: list, adults: int, infants: int, control_checks: list = []) -> list:
-    # Check if there are any routes configured; skip entirely if empty
-    all_dests = [d for o in origins for d in ROUTES["airhaifa"].get(o, [])]
-    if not all_dests:
-        logger.info("Air Haifa: no European routes configured, skipping")
-        return []
-
-    return await with_browser(_run, origins, dates, adults, infants)
+    return await with_browser(_run, origins, dates, adults, infants, control_checks)
 
 
-async def _run(context, origins, dates, adults, infants):
+async def _run(context, origins, dates, adults, infants, control_checks=[]):
     flights = []
-    for origin in origins:
-        dests = ROUTES["airhaifa"].get(origin, [])
-        for dest in dests:
-            for date in dates:
-                url = (
-                    f"{BOOKING_URL}/booking?"
-                    f"from={origin}&to={dest}&date={date}"
-                    f"&adults={adults}&infants={infants}&children=0"
-                )
-                logger.info(f"Air Haifa: {origin}→{dest} {date}")
-                captured = await search_with_interception(context, url, INTERCEPT_PATTERNS)
-                for item in captured:
-                    parsed = _parse(item["data"], origin, dest, date)
-                    flights.extend(parsed)
+    searches = [
+        (origin, dest, date)
+        for origin in origins
+        for dest in ROUTES["airhaifa"].get(origin, [])
+        for date in dates
+    ] + list(control_checks)
+
+    for origin, dest, date in searches:
+        # URL format: /flight-results/{origin}-{dest}/{date}/NA/{adults}/{children}/{infants}
+        url = f"{BOOKING_URL}/flight-results/{origin}-{dest}/{date}/NA/{adults}/0/{infants}"
+        logger.info(f"Air Haifa: {origin}→{dest} {date}")
+        captured = await search_with_interception(context, url, INTERCEPT_PATTERNS)
+        for item in captured:
+            parsed = _parse(item["data"], origin, dest, date)
+            flights.extend(parsed)
     return flights
 
 

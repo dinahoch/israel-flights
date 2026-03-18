@@ -15,18 +15,17 @@ from config import ROUTES
 
 logger = logging.getLogger(__name__)
 
-# Navitaire NewSkies API patterns
 INTERCEPT_PATTERNS = [
     "availability",
-    "nsk",
-    "newskies",
-    "/api/v1/",
-    "search",
     "flights",
+    "search",
+    "results",
+    "offers",
+    "fares",
+    "/api/",
 ]
 
-# Navitaire booking is often on a subdomain; try both
-BOOKING_URL = "https://www.arkia.com"
+BOOKING_URL = "https://www.arkia.co.il/he/flights-results"
 
 
 async def check_arkia(origins: list, dates: list, adults: int, infants: int, control_checks: list = []) -> list:
@@ -54,11 +53,13 @@ async def _run(context, origins, dates, adults, infants, control_checks):
 
 
 async def _search_one(context, origin, dest, date, adults, infants):
-    # Navitaire NewSkies URL pattern — navigate to trigger the search API call
+    date_fmt = date.replace("-", "")  # 20260318
     url = (
         f"{BOOKING_URL}?"
-        f"from={origin}&to={dest}&date={date}"
-        f"&adult={adults}&infant={infants}&child=0&triptype=OW"
+        f"CC=FL&IS_BACK_N_FORTH=false"
+        f"&OB_DEP_CITY={origin}&OB_ARV_CITY={dest}"
+        f"&OB_DATE={date_fmt}"
+        f"&ADULTS={adults}&INFANTS={infants}"
     )
 
     logger.info(f"Arkia: {origin}→{dest} {date}")

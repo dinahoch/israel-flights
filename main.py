@@ -15,7 +15,7 @@ from notify import send_notification
 from state import filter_new, save_seen
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     stream=sys.stdout,
 )

@@ -18,11 +18,12 @@ INTERCEPT_PATTERNS = [
     "availability",
     "search",
     "flights",
-    "booking",
+    "results",
     "offers",
+    "/api/",
 ]
 
-BOOKING_URL = "https://www.israirairlines.com"
+BOOKING_URL = "https://www.israir.co.il/he-IL/reservation/search/flights-abroad/results"
 
 
 async def check_israir(origins: list, dates: list, adults: int, infants: int, control_checks: list = []) -> list:
@@ -50,10 +51,21 @@ async def _run(context, origins, dates, adults, infants, control_checks):
 
 
 async def _search_one(context, origin, dest, date, adults, infants):
+    import json, urllib.parse
+    # Israir uses JSON-encoded city objects; TLV ltravelId is 2135
+    # destination=undefined searches all destinations (we filter results to Europe)
+    origin_obj = json.dumps({"type": "ltravelId", "destinationType": "CITY",
+                             "cityCode": origin, "ltravelId": 2135,
+                             "countryCode": None, "countryId": None})
+    date_fmt = f"{date[8:10]}/{date[5:7]}/{date[:4]}"  # DD/MM/YYYY
     url = (
-        f"{BOOKING_URL}/booking?"
-        f"from={origin}&to={dest}&date={date}"
-        f"&adults={adults}&infants={infants}&children=0&tripType=OW"
+        f"{BOOKING_URL}?"
+        f"origin={urllib.parse.quote(origin_obj)}"
+        f"&destination=undefined"
+        f"&startDate={date_fmt}"
+        f"&adults={adults}&infants={infants}"
+        f"&subject=ALL"
+        f"&searchTime={date}T12:00:00.000Z"
     )
 
     logger.info(f"Israir: {origin}→{dest} {date}")

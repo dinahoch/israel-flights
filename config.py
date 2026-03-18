@@ -51,7 +51,7 @@ ROUTES = {
     "elal":     {"TLV": ALL_DESTINATIONS, "HFA": []},
     "arkia":    {"TLV": ALL_DESTINATIONS, "HFA": []},
     "israir":   {"TLV": ALL_DESTINATIONS, "HFA": []},
-    "airhaifa": {"TLV": [], "HFA": []},  # Domestic only
+    "airhaifa": {"TLV": ["LCA", "ATH"], "HFA": ["LCA", "ATH"]},
 }
 
 # Positive control: fixed searches that should always return flights,

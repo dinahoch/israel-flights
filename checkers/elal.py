@@ -23,9 +23,14 @@ INTERCEPT_PATTERNS = [
     "flight-search",
     "flightSearch",
     "search/flights",
+    "search",
+    "flights",
+    "offers",
+    "fares",
+    "itineraries",
 ]
 
-BOOKING_URL = "https://www.elal.com/en/booking"
+BOOKING_URL = "https://www.elal.com/en/flight-search"
 
 
 async def check_elal(origins: list, dates: list, adults: int, infants: int, control_checks: list = []) -> list:
@@ -59,10 +64,10 @@ async def _search_one(context, origin, dest, date, adults, infants):
     url = (
         f"{BOOKING_URL}?"
         f"origin={origin}&destination={dest}"
-        f"&departDate={date_fmt}"
-        f"&tripType=OW"
+        f"&outboundDate={date}"
+        f"&tripType=ONE_WAY"
         f"&adults={adults}&children=0&infants={infants}"
-        f"&cabin=Y"
+        f"&cabin=ECONOMY"
     )
 
     logger.info(f"El Al: {origin}→{dest} {date}")
